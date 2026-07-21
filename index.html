@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Inventario sincronizado de modelos silvopastoriles, métricas y resultados HTML.">
+  <title>Modelario · Inventario sincronizado</title>
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="workspace-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <span class="brand-mark">M</span>
+        <div><strong>Modelario</strong><small>Inventario sincronizado</small></div>
+      </div>
+
+      <div class="sidebar-heading">
+        <span>COMPONENTES</span>
+        <button class="icon-button" type="button" data-action="modal" data-modal="component" aria-label="Crear componente">＋</button>
+      </div>
+      <nav id="tree" class="tree" aria-label="Grupos y componentes"></nav>
+
+      <div id="sidebar-totals" class="sidebar-footer"></div>
+      <p class="local-note">La información vive en Drive y se carga automáticamente al abrir la página.</p>
+    </aside>
+
+    <section class="content-area">
+      <header class="topbar">
+        <div id="breadcrumb" class="breadcrumb"></div>
+        <div class="topbar-actions">
+          <button class="quiet-button" type="button" data-action="export">Exportar datos</button>
+          <label class="quiet-button" for="import-file" style="display:grid;place-items:center;cursor:pointer">Importar</label>
+          <input class="sr-only" id="import-file" type="file" accept="application/json,.json">
+        </div>
+      </header>
+      <div id="content" class="content-inner"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="modal-root"></div>
+  <script src="app.js"></script>
+</body>
+</html>
