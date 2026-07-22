@@ -13,6 +13,7 @@
   let activeNoteMenu = null;
   let activeActivityMenu = null;
   let editingActivityId = null;
+  let editingNoteId = null;
   let calendarPointerDrag = null;
   let activeCalendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   let activeComparisonMetric = "f1";
@@ -289,24 +290,29 @@
       const noteId = article.querySelector('[data-action="toggle-note-menu"]')?.dataset.id;
       const note = component.notes?.find((item) => item.id === noteId);
       if (note?.attachments?.length) article.insertAdjacentHTML("beforeend", renderNoteAttachments(note));
+      const menu = article.querySelector(".entity-menu-popover");
+      if (note && menu && !menu.querySelector('[data-action="edit-note"]')) menu.insertAdjacentHTML("afterbegin", `<button type="button" data-action="edit-note" data-id="${esc(note.id)}">Editar nota</button>`);
     });
   }
 
   function openModal(kind) {
     const { component, architecture, version } = current();
     const activity = component?.activities?.find((item) => item.id === editingActivityId);
+    const note = component?.notes?.find((item) => item.id === editingNoteId);
     const title = { component: "Nuevo componente", "rename-component": "Renombrar componente", architecture: "Nueva arquitectura", version: "Editar versión", "new-version": "Nueva versión", note: "Nueva nota", activity: "Nueva actividad", "edit-activity": "Editar actividad", "comparison-models": "Modelos a comparar", result: "Añadir carpeta de resultados" }[kind];
     let fields = "";
     if (kind === "component") fields = field("Nombre del componente", "name", "Ej. Detección de suelo desnudo", "", true) + field("Descripción", "description", "Qué representa este componente", "", false, true);
     if (kind === "rename-component") fields = field("Nombre del componente", "name", "", component?.name, true);
     if (kind === "architecture") fields = field("Arquitectura", "name", "Ej. U-Net, Mask R-CNN", "", true);
     if (kind === "note") { pendingNoteFiles = []; fields = `${field("Nota", "text", "Registra una novedad, decisión o hallazgo", "", true, true)}<label class="field attachment-picker"><span>Adjuntos (opcional)</span><input id="note-files" type="file" multiple><small>Puedes seleccionar varios archivos de hasta 50 MB cada uno.</small></label><p id="note-file-status" class="upload-status">Sin archivos adjuntos.</p>`; }
+    if (kind === "edit-note") fields = field("Nota", "text", "Registra una novedad, decisión o hallazgo", note?.text, true, true);
     if (kind === "activity" || kind === "edit-activity") { const value = kind === "edit-activity" ? activity : null; fields = `<div class="form-grid">${field("Fecha de inicio", "startDate", "", value?.startDate || value?.date || new Date().toISOString().slice(0, 10), true, false, false, "date")}${field("Fecha final (opcional)", "endDate", "", value?.endDate || "", false, false, false, "date")}</div>${field("Actividad", "title", "Ej. Revisar datos de entrenamiento", value?.title, true)}${field("Notas", "notes", "Detalle adicional", value?.notes, false, true)}`; }
     if (kind === "comparison-models") fields = component?.architectures.length ? `<p class="form-help">La última versión está seleccionada por defecto; puedes cambiarla para cada modelo.</p><div class="model-check-list">${component.architectures.map((item) => { const selection = component.comparisonSelections.find((value) => value.architectureId === item.id); const defaultVersionId = selection?.versionId || item.versions[item.versions.length - 1]?.id || ""; return `<label><input type="checkbox" name="modelIds" value="${esc(item.id)}" ${selection ? "checked" : ""}><span><strong>${esc(item.name)}</strong><small>Versión a comparar</small><select name="version-${esc(item.id)}" ${item.versions.length ? "" : "disabled"}>${item.versions.map((version) => `<option value="${esc(version.id)}" ${version.id === defaultVersionId ? "selected" : ""}>v${esc(version.version)}</option>`).join("") || "<option>Sin versiones</option>"}</select></span></label>`; }).join("")}</div>` : `<div class="mini-empty">Crea una arquitectura antes de seleccionar modelos.</div>`;
     if (kind === "result") { pendingResultFiles = []; fields = `<div id="result-dropzone" class="result-dropzone" tabindex="0" role="button" aria-label="Seleccionar carpeta de resultados"><strong>Selecciona una carpeta de resultados</strong><span>Incluye allí todos los archivos que quieras conservar con esta versión.</span><div class="upload-actions"><label class="quiet-button" for="result-folder">Seleccionar carpeta</label></div><input id="result-folder" type="file" webkitdirectory directory></div><p id="result-file-status" class="upload-status">Aún no has seleccionado una carpeta.</p>`; }
     if (kind === "version" || kind === "new-version") { const source = kind === "new-version" ? { ...version, version: nextVersion(version?.version), notes: "" } : version; fields = versionFields(source); }
     const modalActions = kind === "result" ? `<div class="modal-actions"><button type="button" class="quiet-button" data-action="close">Cancelar</button></div>` : `<div class="modal-actions"><button type="button" class="quiet-button" data-action="close">Cancelar</button><button type="submit" class="primary-button">Guardar</button></div>`;
     modalRoot.innerHTML = `<div id="modal-backdrop" class="modal-backdrop"><div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head"><div><span>${architecture ? esc(architecture.name) : "MODELARIO"}</span><h2 id="modal-title">${esc(title)}</h2></div><button class="icon-button" type="button" data-action="close" aria-label="Cerrar">×</button></div><form id="modal-form" data-kind="${kind}">${fields}${modalActions}</form></div></div>`;
+    if (kind === "edit-note") modalRoot.querySelector("#modal-title").textContent = "Editar nota";
     toggleTileFields();
     (kind === "result" ? modalRoot.querySelector("#result-dropzone") : document.querySelector("#modal-form input, #modal-form textarea, #modal-form select"))?.focus();
   }
@@ -314,9 +320,9 @@
   function field(label, name, placeholder, value = "", required = false, textarea = false, large = false, type = "text", className = "") { return `<label class="field ${className}"><span>${esc(label)}</span>${textarea ? `<textarea name="${name}" placeholder="${esc(placeholder)}" class="${large ? "large" : ""}" ${required ? "required" : ""}>${esc(value || "")}</textarea>` : `<input type="${type}" name="${name}" placeholder="${esc(placeholder)}" value="${esc(value || "")}" ${required ? "required" : ""}>`}</label>`; }
   function selectField(label, name, value, options) { return `<label class="field"><span>${esc(label)}</span><select name="${name}">${options.map((option) => `<option ${option === value ? "selected" : ""}>${esc(option)}</option>`).join("")}</select></label>`; }
   function nextVersion(value) { const number = Number.parseFloat(value || "0") || 0; return (number + 0.001).toFixed(3); }
-  function closeModal() { editingActivityId = null; modalRoot.innerHTML = ""; }
+  function closeModal() { editingActivityId = null; editingNoteId = null; modalRoot.innerHTML = ""; }
   async function submitModal(event) {
-    event.preventDefault(); const form = event.target; const formData = new FormData(form); const values = Object.fromEntries(formData.entries()); const kind = form.dataset.kind; const { component, architecture, version } = current(); const activity = component?.activities?.find((item) => item.id === editingActivityId);
+    event.preventDefault(); const form = event.target; const formData = new FormData(form); const values = Object.fromEntries(formData.entries()); const kind = form.dataset.kind; const { component, architecture, version } = current(); const activity = component?.activities?.find((item) => item.id === editingActivityId); const note = component?.notes?.find((item) => item.id === editingNoteId);
     if (kind === "component") { const created = { id: uid("component"), name: values.name.trim(), description: values.description.trim(), status: "Exploración", notes: [], activities: [], comparisonSelections: [], architectures: [] }; data.components.push(created); selectedComponentId = created.id; selectedArchitectureId = null; selectedVersionId = null; }
     if (kind === "rename-component" && component) component.name = values.name.trim();
     if (kind === "architecture" && component) { const firstVersion = { id: uid("version"), version: "0.001", source: "", resolution: "", tileSize: "", stride: "", trainingLevel: "Tile", labels: "", trainPeriod: "", geography: "", notes: "", evaluation: null, results: [] }; const created = { id: uid("architecture"), name: values.name.trim(), versions: [firstVersion] }; component.architectures.push(created); selectedArchitectureId = created.id; selectedVersionId = firstVersion.id; }
@@ -332,6 +338,7 @@
         return;
       }
     }
+    if (kind === "edit-note" && note) note.text = values.text.trim();
     if ((kind === "activity" || kind === "edit-activity") && values.endDate && values.endDate < values.startDate) { notify("La fecha final debe ser posterior a la fecha inicial"); return; }
     if (kind === "activity" && component) component.activities.push({ id: uid("activity"), date: values.startDate, startDate: values.startDate, endDate: values.endDate || "", title: values.title.trim(), notes: values.notes.trim() });
     if (kind === "edit-activity" && activity) Object.assign(activity, { date: values.startDate, startDate: values.startDate, endDate: values.endDate || "", title: values.title.trim(), notes: values.notes.trim() });
@@ -340,6 +347,7 @@
     if (kind === "new-version" && architecture) { const created = { id: uid("version"), ...versionData(values), evaluation: null, results: [] }; architecture.versions.push(created); selectedVersionId = created.id; }
     if (kind === "result") return;
     if (kind === "edit-activity") editingActivityId = null;
+    if (kind === "edit-note") editingNoteId = null;
     closeModal(); persist(kind === "result" ? "Resultado añadido; sincronizando con Drive" : "Cambios sincronizándose con Drive"); window.setTimeout(hydrateFrames, 0);
   }
   function normalizedPath(value) { return String(value || "").replace(/\\/g, "/").split("/").reduce((parts, part) => { if (!part || part === ".") return parts; if (part === "..") { parts.pop(); return parts; } parts.push(part); return parts; }, []).join("/"); }
@@ -496,6 +504,7 @@
   document.addEventListener("click", (event) => {
     const control = event.target.closest("[data-action]");
     if (!control) return;
+    if (control.dataset.action === "edit-note") { editingNoteId = control.dataset.id; openModal("edit-note"); }
     if (control.dataset.action === "open-note-file") openNoteFile(control.dataset.noteId, control.dataset.id);
     if (control.dataset.action === "delete-note-file") deleteNoteFile(control.dataset.noteId, control.dataset.id);
   });
