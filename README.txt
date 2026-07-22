@@ -20,7 +20,8 @@ Estructura en Google Drive:
 
 Para GitHub Pages:
 - Sube index.html, styles.css, app.js y favicon.svg a la raíz del repositorio.
-- En GitHub, activa Pages desde la rama principal y la carpeta raíz.
+- En GitHub, activa Pages con fuente «GitHub Actions».
+- Este repositorio incluye el flujo `.github/workflows/pages.yml` para publicar automáticamente cada cambio en `main`.
 - Esta versión es completamente estática y no necesita compilación. La sincronización automática usa la aplicación web de Google Apps Script configurada para este proyecto.
 - El código de esa aplicación está en `apps-script/Code.gs`; actualízalo en Apps Script y vuelve a desplegar la misma implementación antes de publicar cambios.
 
