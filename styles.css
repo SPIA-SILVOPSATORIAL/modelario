@@ -243,6 +243,15 @@ button { color: inherit; }
 .model-check-list small { margin-top: 3px; color: var(--ink-soft); font-size: 10px; }
 .model-check-list select { width: 100%; margin-top: 6px; border: 1px solid var(--line-dark); border-radius: 6px; background: #fff; color: var(--ink); padding: 6px 8px; font-size: 11px; }
 .notes-view { margin-top: 18px; }
+.note-attachments { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.note-attachment { display: flex; overflow: hidden; max-width: 100%; border: 1px solid #c8d7cd; border-radius: 7px; background: #f5f8f2; }
+.note-attachment > button:first-child { display: flex; align-items: center; gap: 7px; min-width: 0; border: 0; background: transparent; color: var(--forest); padding: 7px 8px; cursor: pointer; font-size: 10px; }
+.note-attachment > button:first-child:hover { background: #e7f0e4; }
+.note-attachment span { flex: 0 0 auto; color: var(--ink-soft); font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.note-attachment small { overflow: hidden; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; }
+.note-attachment-remove { flex: 0 0 auto; width: 28px; border: 0; border-left: 1px solid #c8d7cd; background: transparent; color: #8a3d26; cursor: pointer; font-size: 16px; line-height: 1; }
+.note-attachment-remove:hover { background: #f8e8e0; }
+.attachment-picker small { display: block; margin-top: 6px; color: var(--ink-soft); font-size: 10px; line-height: 1.4; }
 .version-switcher { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
 .version-switcher > span { color: var(--ink-soft); font-size: 10px; letter-spacing: .12em; margin-right: 3px; }
 .version-switcher button { border: 1px solid var(--line-dark); border-radius: 99px; padding: 7px 11px; background: var(--paper); color: var(--ink-soft); cursor: pointer; font-size: 11px; }

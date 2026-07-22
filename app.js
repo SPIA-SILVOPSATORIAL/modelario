@@ -18,6 +18,7 @@
   let activeComparisonMetric = "f1";
   let entityMenuCloseTimer = null;
   let pendingResultFiles = [];
+  let pendingNoteFiles = [];
   let toastTimer = null;
   let cloudSyncTimer = null;
   let latestCloudSnapshot = null;
@@ -37,7 +38,7 @@
   function statusClass(value) { return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 
   function normalize(source) {
-    if (Array.isArray(source?.components)) return { components: source.components.map((component) => { const architectures = component.architectures || []; const activities = Array.isArray(component.activities) ? component.activities : (component.trackings || []).flatMap((tracking) => tracking.activities || []); const legacyModelIds = Array.isArray(component.comparisonModelIds) ? component.comparisonModelIds : (component.trackings || []).flatMap((tracking) => tracking.modelIds || []); const savedSelections = Array.isArray(component.comparisonSelections) ? component.comparisonSelections : legacyModelIds.map((architectureId) => ({ architectureId })); const comparisonSelections = savedSelections.map((selection) => { const architecture = architectures.find((item) => item.id === selection.architectureId); return architecture ? { architectureId: architecture.id, versionId: architecture.versions.find((version) => version.id === selection.versionId)?.id || architecture.versions[architecture.versions.length - 1]?.id || "" } : null; }).filter(Boolean); return { ...component, notes: Array.isArray(component.notes) ? component.notes : [], activities: activities.map((activity) => ({ ...activity, architectureId: activity.architectureId || "", startDate: activity.startDate || activity.date || "", endDate: activity.endDate || "" })), comparisonSelections, architectures }; }) };
+    if (Array.isArray(source?.components)) return { components: source.components.map((component) => { const architectures = component.architectures || []; const activities = Array.isArray(component.activities) ? component.activities : (component.trackings || []).flatMap((tracking) => tracking.activities || []); const legacyModelIds = Array.isArray(component.comparisonModelIds) ? component.comparisonModelIds : (component.trackings || []).flatMap((tracking) => tracking.modelIds || []); const savedSelections = Array.isArray(component.comparisonSelections) ? component.comparisonSelections : legacyModelIds.map((architectureId) => ({ architectureId })); const comparisonSelections = savedSelections.map((selection) => { const architecture = architectures.find((item) => item.id === selection.architectureId); return architecture ? { architectureId: architecture.id, versionId: architecture.versions.find((version) => version.id === selection.versionId)?.id || architecture.versions[architecture.versions.length - 1]?.id || "" } : null; }).filter(Boolean); return { ...component, notes: Array.isArray(component.notes) ? component.notes.map((note) => ({ ...note, attachments: Array.isArray(note.attachments) ? note.attachments : [] })) : [], activities: activities.map((activity) => ({ ...activity, architectureId: activity.architectureId || "", startDate: activity.startDate || activity.date || "", endDate: activity.endDate || "" })), comparisonSelections, architectures }; }) };
     if (!Array.isArray(source?.groups)) return { components: [] };
     return { components: source.groups.flatMap((group) => group.components.map((part) => {
       const model = part.model;
@@ -190,6 +191,7 @@
     if (!component) { content.innerHTML = emptyState("◇", "Crea tu primer componente", "Organiza aquí un caso de uso y sus arquitecturas comparables.", "Nuevo componente", "component"); return; }
     const tabs = [["tracking", "Seguimiento"], ["overview", "Arquitecturas"], ["spec", "Ficha técnica"], ["results", "Resultados"]];
     content.innerHTML = `<section class="component-hero"><div><div class="eyebrow"><span class="status status-${statusClass(component.status)}">${esc(component.status)}</span><span>Componente</span></div><h1>${esc(component.name)}</h1><p>${esc(component.description)}</p></div><div class="hero-aside">${architecture ? `<div class="model-selector"><span>ARQUITECTURA ACTIVA</span><strong>${esc(architecture.name)}</strong><small>v${esc(version?.version || "sin versión")}</small></div>` : ""}</div></section><div class="tabbar" role="tablist">${tabs.map(([id, label]) => `<button type="button" role="tab" aria-selected="${activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("")}</div><div id="tab-content">${renderTab(component, architecture, version)}</div>`;
+    hydrateFrames();
   }
   function renderTab(component, architecture, version) {
     if (activeTab === "tracking") return renderTracking(component);
@@ -274,7 +276,21 @@
   function fact(label, value) { return `<div class="fact"><span>${esc(label)}</span><strong>${esc(value || "—")}</strong></div>`; }
   function emptyState(icon, title, text, button, modal) { return `<div class="empty-state"><span class="empty-icon">${icon}</span><h2>${esc(title)}</h2><p>${esc(text)}</p><button class="primary-button" type="button" data-action="modal" data-modal="${modal}">${esc(button)}</button></div>`; }
   function entityMenu(id) { const menuId = `component:${id}`; const isOpen = activeEntityMenu === menuId; return `<div class="entity-menu"><button class="more-button" type="button" data-action="toggle-menu" data-menu="${esc(menuId)}" aria-label="Opciones del componente" aria-expanded="${isOpen}">•••</button>${isOpen ? `<div class="entity-menu-popover" role="menu"><button type="button" role="menuitem" data-action="modal" data-modal="rename-component">Renombrar</button><button class="menu-danger" type="button" role="menuitem" data-action="delete-component">Eliminar</button></div>` : ""}</div>`; }
-  function hydrateFrames() {}
+  function renderNoteAttachments(note) {
+    const attachments = note.attachments || [];
+    if (!attachments.length) return "";
+    return `<div class="note-attachments" aria-label="Adjuntos de la nota">${attachments.map((attachment) => `<div class="note-attachment"><button type="button" data-action="open-note-file" data-note-id="${esc(note.id)}" data-id="${esc(attachment.id)}" title="Abrir ${esc(attachment.name)}"><span>Adjunto</span>${esc(attachment.name)}${attachment.size ? `<small>${esc(formatFileSize(attachment.size))}</small>` : ""}</button><button class="note-attachment-remove" type="button" data-action="delete-note-file" data-note-id="${esc(note.id)}" data-id="${esc(attachment.id)}" aria-label="Eliminar ${esc(attachment.name)}">×</button></div>`).join("")}</div>`;
+  }
+  function hydrateFrames() {
+    const { component } = current();
+    if (!component) return;
+    document.querySelectorAll(".note-list article").forEach((article) => {
+      if (article.querySelector(".note-attachments")) return;
+      const noteId = article.querySelector('[data-action="toggle-note-menu"]')?.dataset.id;
+      const note = component.notes?.find((item) => item.id === noteId);
+      if (note?.attachments?.length) article.insertAdjacentHTML("beforeend", renderNoteAttachments(note));
+    });
+  }
 
   function openModal(kind) {
     const { component, architecture, version } = current();
@@ -284,7 +300,7 @@
     if (kind === "component") fields = field("Nombre del componente", "name", "Ej. Detección de suelo desnudo", "", true) + field("Descripción", "description", "Qué representa este componente", "", false, true);
     if (kind === "rename-component") fields = field("Nombre del componente", "name", "", component?.name, true);
     if (kind === "architecture") fields = field("Arquitectura", "name", "Ej. U-Net, Mask R-CNN", "", true);
-    if (kind === "note") fields = field("Nota", "text", "Registra una novedad, decisión o hallazgo", "", true, true);
+    if (kind === "note") { pendingNoteFiles = []; fields = `${field("Nota", "text", "Registra una novedad, decisión o hallazgo", "", true, true)}<label class="field attachment-picker"><span>Adjuntos (opcional)</span><input id="note-files" type="file" multiple><small>Puedes seleccionar varios archivos de hasta 50 MB cada uno.</small></label><p id="note-file-status" class="upload-status">Sin archivos adjuntos.</p>`; }
     if (kind === "activity" || kind === "edit-activity") { const value = kind === "edit-activity" ? activity : null; fields = `<div class="form-grid">${field("Fecha de inicio", "startDate", "", value?.startDate || value?.date || new Date().toISOString().slice(0, 10), true, false, false, "date")}${field("Fecha final (opcional)", "endDate", "", value?.endDate || "", false, false, false, "date")}</div>${field("Actividad", "title", "Ej. Revisar datos de entrenamiento", value?.title, true)}${field("Notas", "notes", "Detalle adicional", value?.notes, false, true)}`; }
     if (kind === "comparison-models") fields = component?.architectures.length ? `<p class="form-help">La última versión está seleccionada por defecto; puedes cambiarla para cada modelo.</p><div class="model-check-list">${component.architectures.map((item) => { const selection = component.comparisonSelections.find((value) => value.architectureId === item.id); const defaultVersionId = selection?.versionId || item.versions[item.versions.length - 1]?.id || ""; return `<label><input type="checkbox" name="modelIds" value="${esc(item.id)}" ${selection ? "checked" : ""}><span><strong>${esc(item.name)}</strong><small>Versión a comparar</small><select name="version-${esc(item.id)}" ${item.versions.length ? "" : "disabled"}>${item.versions.map((version) => `<option value="${esc(version.id)}" ${version.id === defaultVersionId ? "selected" : ""}>v${esc(version.version)}</option>`).join("") || "<option>Sin versiones</option>"}</select></span></label>`; }).join("")}</div>` : `<div class="mini-empty">Crea una arquitectura antes de seleccionar modelos.</div>`;
     if (kind === "result") { pendingResultFiles = []; fields = `<div id="result-dropzone" class="result-dropzone" tabindex="0" role="button" aria-label="Seleccionar carpeta de resultados"><strong>Selecciona una carpeta de resultados</strong><span>Incluye allí todos los archivos que quieras conservar con esta versión.</span><div class="upload-actions"><label class="quiet-button" for="result-folder">Seleccionar carpeta</label></div><input id="result-folder" type="file" webkitdirectory directory></div><p id="result-file-status" class="upload-status">Aún no has seleccionado una carpeta.</p>`; }
@@ -304,7 +320,18 @@
     if (kind === "component") { const created = { id: uid("component"), name: values.name.trim(), description: values.description.trim(), status: "Exploración", notes: [], activities: [], comparisonSelections: [], architectures: [] }; data.components.push(created); selectedComponentId = created.id; selectedArchitectureId = null; selectedVersionId = null; }
     if (kind === "rename-component" && component) component.name = values.name.trim();
     if (kind === "architecture" && component) { const firstVersion = { id: uid("version"), version: "0.001", source: "", resolution: "", tileSize: "", stride: "", trainingLevel: "Tile", labels: "", trainPeriod: "", geography: "", notes: "", evaluation: null, results: [] }; const created = { id: uid("architecture"), name: values.name.trim(), versions: [firstVersion] }; component.architectures.push(created); selectedArchitectureId = created.id; selectedVersionId = firstVersion.id; }
-    if (kind === "note" && component) { component.notes = component.notes || []; component.notes.push({ id: uid("note"), date: new Date().toLocaleDateString("es-CO"), text: values.text.trim() }); }
+    if (kind === "note" && component) {
+      const note = { id: uid("note"), date: new Date().toLocaleDateString("es-CO"), text: values.text.trim(), attachments: [] };
+      component.notes = component.notes || [];
+      component.notes.push(note);
+      try {
+        await attachNoteFiles(component, note);
+      } catch (error) {
+        component.notes = component.notes.filter((item) => item.id !== note.id);
+        notify(error.message || "No se pudieron adjuntar los archivos");
+        return;
+      }
+    }
     if ((kind === "activity" || kind === "edit-activity") && values.endDate && values.endDate < values.startDate) { notify("La fecha final debe ser posterior a la fecha inicial"); return; }
     if (kind === "activity" && component) component.activities.push({ id: uid("activity"), date: values.startDate, startDate: values.startDate, endDate: values.endDate || "", title: values.title.trim(), notes: values.notes.trim() });
     if (kind === "edit-activity" && activity) Object.assign(activity, { date: values.startDate, startDate: values.startDate, endDate: values.endDate || "", title: values.title.trim(), notes: values.notes.trim() });
@@ -328,6 +355,22 @@
   function formatFileSize(bytes) { if (!bytes) return "0 B"; const units = ["B", "KB", "MB", "GB"]; const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return `${(bytes / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`; }
   function updatePendingResultStatus() { const status = modalRoot.querySelector("#result-file-status"); if (!status) return; const totalSize = pendingResultFiles.reduce((total, record) => total + record.file.size, 0); status.textContent = `${pendingResultFiles.length} archivo${pendingResultFiles.length === 1 ? "" : "s"} seleccionado${pendingResultFiles.length === 1 ? "" : "s"} · ${formatFileSize(totalSize)}`; }
   function addPendingResultFiles(records) { const seen = new Set(pendingResultFiles.map((record) => `${record.path}:${record.file.size}:${record.file.lastModified}`)); pendingResultFiles.push(...records.filter((record) => { const key = `${record.path}:${record.file.size}:${record.file.lastModified}`; if (seen.has(key)) return false; seen.add(key); return true; })); updatePendingResultStatus(); }
+  function noteStorageName(file) { return `${uid("file")}-${String(file.name || "archivo").replace(/[\\/:*?"<>|]/g, "-").slice(0, 80)}`; }
+  function updatePendingNoteStatus() { const status = modalRoot.querySelector("#note-file-status"); if (!status) return; const totalSize = pendingNoteFiles.reduce((total, record) => total + record.file.size, 0); status.textContent = pendingNoteFiles.length ? `${pendingNoteFiles.length} archivo${pendingNoteFiles.length === 1 ? "" : "s"} adjunto${pendingNoteFiles.length === 1 ? "" : "s"} · ${formatFileSize(totalSize)}` : "Sin archivos adjuntos."; }
+  function addPendingNoteFiles(records) { const seen = new Set(pendingNoteFiles.map((record) => `${record.file.name}:${record.file.size}:${record.file.lastModified}`)); pendingNoteFiles.push(...records.filter((record) => { const key = `${record.file.name}:${record.file.size}:${record.file.lastModified}`; if (seen.has(key)) return false; seen.add(key); return true; })); updatePendingNoteStatus(); }
+  async function attachNoteFiles(component, note) {
+    if (!pendingNoteFiles.length) return;
+    const largeFile = pendingNoteFiles.find((record) => record.file.size > MAX_RESULT_SIZE);
+    if (largeFile) throw new Error(`El archivo ${largeFile.file.name} supera 50 MB`);
+    const status = modalRoot.querySelector("#note-file-status");
+    for (let index = 0; index < pendingNoteFiles.length; index += 1) {
+      const record = pendingNoteFiles[index];
+      const attachment = { id: uid("attachment"), name: record.file.name, storageName: noteStorageName(record.file), size: record.file.size, mimeType: record.file.type || "application/octet-stream" };
+      if (status) status.textContent = `Subiendo adjunto ${index + 1} de ${pendingNoteFiles.length}…`;
+      await postCloudAction({ action: "note-file", componentId: component.id, componentName: component.name, noteId: note.id, fileName: attachment.storageName, mimeType: attachment.mimeType, data: await readDataUrl(record.file) });
+      note.attachments.push(attachment);
+    }
+  }
   async function attachResultFolder() {
     const { component, version } = current();
     const status = modalRoot.querySelector("#result-file-status");
@@ -355,8 +398,49 @@
   function deleteComponent() { const { component } = current(); if (!component || !window.confirm(`¿Eliminar el componente “${component.name}” y todas sus arquitecturas? Esta acción no se puede deshacer.`)) return; data.components = data.components.filter((item) => item.id !== component.id); selectedComponentId = data.components[0]?.id ?? null; selectedArchitectureId = data.components[0]?.architectures[0]?.id ?? null; selectedVersionId = data.components[0]?.architectures[0]?.versions[0]?.id ?? null; activeTab = "tracking"; persist("Componente eliminado"); }
   function deleteArchitecture() { const { component, architecture } = current(); if (!component || !architecture || !window.confirm(`¿Eliminar la arquitectura “${architecture.name}” y todas sus versiones? Esta acción no se puede deshacer.`)) return; component.architectures = component.architectures.filter((item) => item.id !== architecture.id); selectedArchitectureId = component.architectures[0]?.id ?? null; selectedVersionId = component.architectures[0]?.versions[0]?.id ?? null; activeTab = "overview"; persist("Arquitectura eliminada"); }
   function deleteVersion() { const { architecture, version } = current(); if (!architecture || !version || !window.confirm(`¿Eliminar la versión ${version.version}? Esta acción no se puede deshacer.`)) return; architecture.versions = architecture.versions.filter((item) => item.id !== version.id); selectedVersionId = architecture.versions[0]?.id ?? null; activeTab = "spec"; persist("Versión eliminada"); }
-  function deleteNote(noteId) { const { component } = current(); const note = component?.notes?.find((item) => item.id === noteId); if (!component || !note || !window.confirm("¿Eliminar esta nota? Esta acción no se puede deshacer.")) return; component.notes = component.notes.filter((item) => item.id !== noteId); activeNoteMenu = null; persist("Nota eliminada"); }
   function deleteActivity(activityId) { const { component } = current(); const activity = component?.activities?.find((item) => item.id === activityId); if (!component || !activity || !window.confirm("¿Eliminar esta actividad? Esta acción no se puede deshacer.")) return; component.activities = component.activities.filter((item) => item.id !== activityId); activeActivityMenu = null; persist("Actividad eliminada"); }
+  async function deleteNote(noteId) {
+    const { component } = current();
+    const note = component?.notes?.find((item) => item.id === noteId);
+    if (!component || !note || !window.confirm("¿Eliminar esta nota y sus adjuntos? Esta acción no se puede deshacer.")) return;
+    try {
+      await postCloudAction({ action: "delete-note-attachments", componentId: component.id, noteId: note.id });
+      component.notes = component.notes.filter((item) => item.id !== noteId);
+      activeNoteMenu = null;
+      persist("Nota y adjuntos eliminados");
+    } catch {
+      notify("No se pudieron eliminar los adjuntos de Drive");
+    }
+  }
+  async function openNoteFile(noteId, attachmentId) {
+    const { component } = current();
+    const note = component?.notes?.find((item) => item.id === noteId);
+    const attachment = note?.attachments?.find((item) => item.id === attachmentId);
+    if (!component || !note || !attachment) return;
+    const fileWindow = window.open("", "_blank");
+    notify("Abriendo adjunto en Drive…");
+    try {
+      const response = await cloudJsonp("note-file-link", { componentId: component.id, noteId: note.id, fileName: attachment.storageName || attachment.name });
+      if (!response?.ok || !response.url) throw new Error(response?.error || "No se pudo abrir el adjunto");
+      if (fileWindow) fileWindow.location.assign(response.url); else window.location.assign(response.url);
+    } catch (error) {
+      fileWindow?.close();
+      notify(error.message || "No se pudo abrir el adjunto");
+    }
+  }
+  async function deleteNoteFile(noteId, attachmentId) {
+    const { component } = current();
+    const note = component?.notes?.find((item) => item.id === noteId);
+    const attachment = note?.attachments?.find((item) => item.id === attachmentId);
+    if (!component || !note || !attachment || !window.confirm(`¿Eliminar el adjunto “${attachment.name}”?`)) return;
+    try {
+      await postCloudAction({ action: "delete-note-file", componentId: component.id, noteId: note.id, fileName: attachment.storageName || attachment.name });
+      note.attachments = note.attachments.filter((item) => item.id !== attachment.id);
+      persist("Adjunto eliminado");
+    } catch {
+      notify("No se pudo eliminar el adjunto de Drive");
+    }
+  }
   function shiftDate(value, days) { const date = new Date(`${value}T12:00:00`); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); }
   function resizeActivity(activityId, edge, date) { const { component } = current(); const activity = component?.activities?.find((item) => item.id === activityId); const start = activity?.startDate || activity?.date; const end = activity?.endDate || start; if (!activity || !start || !date) return; if (edge === "start" && date > end) { notify("El inicio no puede ser posterior al final"); return; } if (edge === "end" && date < start) { notify("El final no puede ser anterior al inicio"); return; } if (edge === "start") { activity.startDate = date; activity.date = date; } else activity.endDate = date === start ? "" : date; persist("Duración de la actividad actualizada"); }
   async function deleteResult(resultId) {
@@ -404,6 +488,17 @@
   modalRoot.addEventListener("keydown", (event) => { if (event.key !== "Enter" && event.key !== " ") return; const zone = event.target.closest("#result-dropzone"); if (!zone) return; event.preventDefault(); modalRoot.querySelector("#result-folder")?.click(); });
   document.getElementById("import-file").addEventListener("change", (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { data = normalize(JSON.parse(String(reader.result))); selectedComponentId = data.components[0]?.id ?? null; selectedArchitectureId = data.components[0]?.architectures[0]?.id ?? null; selectedVersionId = data.components[0]?.architectures[0]?.versions[0]?.id ?? null; activeTab = "tracking"; persist("Respaldo importado"); hydrateFrames(); } catch { notify("El archivo no es un respaldo válido de Modelario"); } event.target.value = ""; }; reader.readAsText(file); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && modalRoot.innerHTML) closeModal(); });
+  modalRoot.addEventListener("change", (event) => {
+    if (event.target.id !== "note-files") return;
+    addPendingNoteFiles([...event.target.files].map((file) => recordFile(file)));
+    event.target.value = "";
+  });
+  document.addEventListener("click", (event) => {
+    const control = event.target.closest("[data-action]");
+    if (!control) return;
+    if (control.dataset.action === "open-note-file") openNoteFile(control.dataset.noteId, control.dataset.id);
+    if (control.dataset.action === "delete-note-file") deleteNoteFile(control.dataset.noteId, control.dataset.id);
+  });
   render(); hydrateFrames();
   loadCloudData();
 })();

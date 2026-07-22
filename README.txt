@@ -11,11 +11,13 @@ Estructura del inventario:
 - Cada componente puede tener varias arquitecturas comparables.
 - Cada arquitectura conserva sus versiones (0.001, 0.002, etc.), evaluación por matriz de confusión y resultados.
 - La pestaña «Seguimiento» guarda el objetivo, notas acumulables y una bitácora de actividades.
+- Cada nota puede incluir varios adjuntos; se abren o eliminan directamente desde la nota.
 - Los resultados se adjuntan como una carpeta completa de archivos para cada versión; se pueden abrir en Drive para descargarlos sin guardar ZIPs adicionales en el proyecto, o eliminar desde la misma pestaña.
 
 Estructura en Google Drive:
 - `modelario-index.json` conserva un índice ligero de los componentes.
 - Cada componente tiene su propia carpeta, su archivo `componente.json` y una subcarpeta `resultados`.
+- Los adjuntos de las notas se guardan en `adjuntos-notas/nota-{id}` dentro de la carpeta de su componente.
 - La primera carga con esta versión convierte automáticamente el antiguo `modelario-shared.json`, sin borrar ese archivo de respaldo.
 
 Para GitHub Pages:

@@ -3,11 +3,15 @@ const INDEX_FILE_NAME = 'modelario-index.json';
 const LEGACY_PROJECT_FILE_NAME = 'modelario-shared.json';
 const COMPONENT_FILE_NAME = 'componente.json';
 const RESULTS_FOLDER_NAME = 'resultados';
+const NOTE_ATTACHMENTS_FOLDER_NAME = 'adjuntos-notas';
 
 function doGet(e) {
   const action = e && e.parameter ? e.parameter.action : '';
   if (action === 'result-folder-link') {
     return respond(resultFolderLink(e.parameter.componentId, e.parameter.resultId), e);
+  }
+  if (action === 'note-file-link') {
+    return respond(noteFileLink(e.parameter.componentId, e.parameter.noteId, e.parameter.fileName), e);
   }
   return respond({ ok: true, data: readProject() }, e);
 }
@@ -23,6 +27,18 @@ function doPost(e) {
   }
   if (request.action === 'delete-result') {
     deleteResultFolder(request.componentId, request.resultId);
+    return respond({ ok: true }, e);
+  }
+  if (request.action === 'note-file') {
+    saveNoteFile(request);
+    return respond({ ok: true }, e);
+  }
+  if (request.action === 'delete-note-file') {
+    deleteNoteFile(request.componentId, request.noteId, request.fileName);
+    return respond({ ok: true }, e);
+  }
+  if (request.action === 'delete-note-attachments') {
+    deleteNoteAttachments(request.componentId, request.noteId);
     return respond({ ok: true }, e);
   }
   writeProject(request.data || { components: [] });
@@ -215,6 +231,55 @@ function resultFolderLink(componentId, resultId) {
   if (!folder) return { ok: false, error: 'No se encontró la carpeta de resultados en Drive.' };
   folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return { ok: true, url: folder.getUrl() };
+}
+
+function componentFolderById(componentId) {
+  const location = componentEntry(componentId, 'Componente');
+  return componentFolder(location.root, location.entry, null);
+}
+
+function findChildFolder(parent, name) {
+  const folders = parent.getFoldersByName(name);
+  return folders.hasNext() ? folders.next() : null;
+}
+
+function noteAttachmentsFolder(componentId, noteId, create) {
+  const component = componentFolderById(componentId);
+  const attachments = create
+    ? childFolder(component, NOTE_ATTACHMENTS_FOLDER_NAME)
+    : findChildFolder(component, NOTE_ATTACHMENTS_FOLDER_NAME);
+  if (!attachments) return null;
+  const name = `nota-${String(noteId || '')}`;
+  return create ? childFolder(attachments, name) : findChildFolder(attachments, name);
+}
+
+function saveNoteFile(request) {
+  const folder = noteAttachmentsFolder(request.componentId, request.noteId, true);
+  const fileName = safeName(request.fileName || 'archivo');
+  if (namedFile(folder, fileName)) return;
+  const base64 = String(request.data || '').split(',').pop();
+  if (!base64) throw new Error('Archivo sin contenido');
+  const bytes = Utilities.base64Decode(base64);
+  folder.createFile(Utilities.newBlob(bytes, request.mimeType || 'application/octet-stream', fileName));
+}
+
+function noteFileLink(componentId, noteId, fileName) {
+  const folder = noteAttachmentsFolder(componentId, noteId, false);
+  const file = folder ? namedFile(folder, safeName(fileName)) : null;
+  if (!file) return { ok: false, error: 'No se encontró el adjunto en Drive.' };
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return { ok: true, url: file.getUrl() };
+}
+
+function deleteNoteFile(componentId, noteId, fileName) {
+  const folder = noteAttachmentsFolder(componentId, noteId, false);
+  const file = folder ? namedFile(folder, safeName(fileName)) : null;
+  if (file) file.setTrashed(true);
+}
+
+function deleteNoteAttachments(componentId, noteId) {
+  const folder = noteAttachmentsFolder(componentId, noteId, false);
+  if (folder) folder.setTrashed(true);
 }
 
 function respond(payload, e) {
